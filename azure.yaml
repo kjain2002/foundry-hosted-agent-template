@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+requiredVersions:
+    extensions:
+        azure.ai.agents: '>=1.0.0-beta.4'
+name: agent-framework-agent-basic-responses
+services:
+    agent-framework-agent-basic-responses:
+        project: src/agent-framework-agent-basic-responses
+        host: azure.ai.agent
+        language: python
+        uses:
+            - ai-project
+        codeConfiguration:
+            entryPoint: main.py
+            runtime: python_3_13
+        container:
+            resources:
+                cpu: "2"
+                memory: 4Gi
+        description: A basic Agent Framework agent hosted by Foundry.
+        environmentVariables:
+            - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
+              value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+            - name: AGENT_TOOL_MODE
+              value: ${AGENT_TOOL_MODE}
+            - name: CI_INCLUDE_TOOLBOX
+              value: ${CI_INCLUDE_TOOLBOX}
+        kind: hosted
+        metadata:
+            tags:
+                - Agent Framework
+                - AI Agent Hosting
+                - Azure AI AgentServer
+                - Responses Protocol
+                - Streaming
+        name: agent-framework-agent-basic-responses
+        protocols:
+            - protocol: responses
+              version: 2.0.0
+    ai-project:
+        host: azure.ai.project
+        deployments: []
+        endpoint: https://YOUR_FOUNDRY_ACCOUNT.services.ai.azure.com/api/projects/YOUR_PROJECT
+infra:
+    provider: microsoft.foundry

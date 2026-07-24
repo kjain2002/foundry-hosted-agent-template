@@ -1,0 +1,5 @@
+# Dependencies for the local test UI (ui/app.py)
+flask>=3.0
+httpx>=0.27
+azure-identity>=1.17
+werkzeug>=3.0

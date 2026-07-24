@@ -1,0 +1,6 @@
+# Example Foundry toolbox definition (OAuth identity passthrough) for hosted agent consumption.
+# Replace with your own toolbox name + connection(s). This file documents the shape only;
+# create/manage the toolbox in your Foundry project, then point TOOLBOX_MCP_ENDPOINT at it.
+description: Example MCP toolbox (OAuth identity passthrough) for hosted agent consumption
+connections:
+  - name: your-connection

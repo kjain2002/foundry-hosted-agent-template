@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# azd environment (contains your project endpoint, model, secrets)
+.azure/
+
+# Local UI state and per-turn debug logs
+ui/logs/
+response_dump.json
+
+# Generated / downloaded artifacts
+*.pptx
+downloaded_*.pptx
+
+# Server + deploy logs
+*.log
+
+# Local env files (never commit real values)
+.env
+*.env
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
