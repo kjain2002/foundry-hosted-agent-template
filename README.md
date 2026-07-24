@@ -192,7 +192,12 @@ Read [foundry-skills-journey.md](foundry-skills-journey.md). It documents the RB
 
 ---
 
-## Non-goals / notes
+## Provisioning (infrastructure)
 
-- **Infrastructure:** provisioning is handled by `azd` + the Foundry extension — there is **no committed Bicep/Terraform** in this template. Bring your own Foundry project, or provision one with your preferred IaC.
-- The bundled **Starburst** toolbox and **PPTX** skill are illustrative. Replace them with your own MCP tools and skills.
+**This branch ships Terraform.** Stand up the Foundry project with:
+
+- [`infra/terraform/`](infra/terraform/) — provisions a project + model deployment + optional App Insights + RBAC on an existing Foundry account (`terraform init && terraform apply -var-file=example.tfvars`).
+- Prefer Bicep? The **`main` branch** carries the same template with `infra/bicep/` instead.
+- Already have a project? Skip IaC and just set `FOUNDRY_PROJECT_ENDPOINT`.
+
+> Neither IaC creates the Foundry *account* — bring an existing one (or create it first). The bundled **Starburst** toolbox and **PPTX** skill are illustrative; replace them with your own MCP tools and skills.
