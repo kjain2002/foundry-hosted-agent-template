@@ -22,7 +22,7 @@ param projectName string
 param displayName string = projectName
 
 @description('Optional project description.')
-param description string = ''
+param projectDescription string = ''
 
 // --- Model deployment (account-scoped, shared by all projects on the account) ---
 @description('Create a model deployment so agents can be created.')
@@ -59,7 +59,7 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
   }
   properties: {
     displayName: displayName
-    description: empty(description) ? null : description
+    description: empty(projectDescription) ? null : projectDescription
   }
 }
 
@@ -99,7 +99,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = if (enableAppI
   kind: 'web'
   properties: {
     Application_Type: 'web'
-    WorkspaceResourceId: law.id
+    WorkspaceResourceId: law!.id
   }
 }
 
@@ -108,15 +108,15 @@ resource appInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/co
   name: 'appinsights'
   properties: {
     category: 'AppInsights'
-    target: appInsights.id
+    target: appInsights!.id
     authType: 'ApiKey'
     isSharedToAll: true
     credentials: {
-      key: appInsights.properties.ConnectionString
+      key: appInsights!.properties.ConnectionString
     }
     metadata: {
       ApiType: 'Azure'
-      ResourceId: appInsights.id
+      ResourceId: appInsights!.id
     }
   }
 }

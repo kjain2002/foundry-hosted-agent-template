@@ -5,7 +5,7 @@ param existingAccountName = 'your-foundry-account'
 param location = 'eastus2'
 param projectName = 'my-agent-project'
 param displayName = 'My Agent Project'
-param description = 'Foundry project for the hosted agent'
+param projectDescription = 'Foundry project for the hosted agent'
 
 // Model deployment (agent-ready)
 param deployModel = true
