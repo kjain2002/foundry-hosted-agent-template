@@ -13,6 +13,40 @@ A reusable template for publishing your own **Microsoft Foundry hosted agent** t
 
 ---
 
+## Two phases: provision, then deploy
+
+Standing up a hosted agent is **two separate steps**. Infrastructure-as-code (Bicep/Terraform) only covers the first; `azd deploy` always does the second.
+
+| Phase | What it does | Done by |
+|---|---|---|
+| **1. Provision** | Create the Azure resources — Foundry project, model deployment, App Insights, RBAC | `azd provision` **— or** Bicep (`main`) / Terraform (`terraform` branch) |
+| **2. Deploy** | Build the agent code into a container and ship it to the Foundry hosted runtime | `azd deploy` (IaC can't do this) |
+
+> Bicep/Terraform are an **alternative to `azd provision`** — the "build the house" step. `azd deploy` is the "move the furniture in" step and is **always** required.
+
+### Already have a Foundry project? (most common)
+
+Skip IaC entirely — point the template at your existing project and deploy:
+
+```powershell
+# 1. Set two values (in .env or the azd environment):
+#    FOUNDRY_PROJECT_ENDPOINT       = https://<account>.services.ai.azure.com/api/projects/<project>
+#    AZURE_AI_MODEL_DEPLOYMENT_NAME = <your-model-deployment>   # e.g. gpt-4.1
+#    (+ TOOLBOX_MCP_ENDPOINT if you use MCP tools)
+
+# 2. Deploy the agent into that project:
+azd ai agent init      # point at the existing project when prompted
+azd deploy
+```
+
+Check first: the project has a **model deployment**, your identity **and** the agent's managed identity have the right **Foundry roles** (`Foundry User` / `Cognitive Services User`), and (if using tools) the **toolbox + OAuth consent** are set up. The journey doc has the exact RBAC that bit us.
+
+### Need a new project?
+
+Use **Bicep** (this `main` branch → `infra/bicep/`) or **Terraform** (the `terraform` branch → `infra/terraform/`) for Phase 1, then `azd deploy` for Phase 2. See [Provisioning](#provisioning-infrastructure) below.
+
+---
+
 ## What's in the box
 
 | Path | Purpose |
