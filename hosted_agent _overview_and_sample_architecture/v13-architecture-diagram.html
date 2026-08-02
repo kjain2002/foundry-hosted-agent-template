@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v13 Hosted Agent — Architecture & Journey</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+    const theme =
+      param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef;
+  --cp-bg-elevated: #fcfbf8;
+  --cp-surface: #ffffff;
+  --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede;
+  --cp-border-strong: #919191;
+  --cp-text: #242424;
+  --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b;
+  --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08);
+  --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a;
+  --cp-danger: #dc2626;
+  --cp-warning: #f59e0b;
+  --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-panel: rgba(255, 255, 255, 0.86);
+  --cp-panel-strong: rgba(255, 255, 255, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.55);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a;
+  --cp-bg-elevated: #343231;
+  --cp-surface: #292929;
+  --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747;
+  --cp-border-strong: #5f5f5f;
+  --cp-text: #dedede;
+  --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1;
+  --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14);
+  --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80;
+  --cp-danger: #f87171;
+  --cp-warning: #fbbf24;
+  --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-panel: rgba(41, 41, 41, 0.72);
+  --cp-panel-strong: rgba(41, 41, 41, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.04);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--cp-bg);
+  color: var(--cp-text);
+  font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.5;
+  padding: 28px 20px 60px;
+}
+.wrap { max-width: 1160px; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.15rem; margin: 30px 0 12px; display: flex; align-items: center; gap: 8px; }
+.sub { color: var(--cp-text-muted); margin: 0 0 6px; }
+.pill {
+  display: inline-block; padding: 3px 10px; border-radius: 999px;
+  background: var(--cp-accent-soft); color: var(--cp-accent);
+  border: 1px solid var(--cp-accent); font-size: 0.78rem; font-weight: 600;
+}
+.card {
+  background: var(--cp-surface); border: 1px solid var(--cp-border);
+  border-radius: 16px; padding: 16px 18px;
+  box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+}
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 4px; font-size: 0.82rem; color: var(--cp-text-muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.dot.foundry { background: var(--cp-accent); }
+.dot.client { background: var(--cp-link); }
+.dot.identity { background: var(--cp-warning); }
+
+/* Flow grid */
+.flow { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.lane {
+  border: 1px dashed var(--cp-border-strong); border-radius: 16px;
+  padding: 14px; position: relative; background: var(--cp-bg-elevated);
+}
+.lane-title { position: absolute; top: -11px; left: 16px; background: var(--cp-bg); padding: 0 8px; font-size: 0.8rem; font-weight: 700; letter-spacing: .3px; }
+.lane.client-lane { border-color: var(--cp-link); }
+.lane.foundry-lane { border-color: var(--cp-accent); }
+.nodes { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+.node {
+  flex: 1 1 220px; min-width: 200px; background: var(--cp-surface);
+  border: 1px solid var(--cp-border); border-radius: 12px; padding: 12px 14px;
+}
+.node .n-title { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.node .n-body { font-size: 0.86rem; color: var(--cp-text-muted); margin-top: 6px; }
+.node .tag { font-size: 0.72rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-left: auto; }
+.tag.foundry { background: var(--cp-accent-soft); color: var(--cp-accent); border: 1px solid var(--cp-accent); }
+.tag.client { background: rgba(0,120,212,0.10); color: var(--cp-link); border: 1px solid var(--cp-link); }
+.arrows { text-align: center; color: var(--cp-accent); font-size: 1.4rem; margin: 2px 0; }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(280px,1fr)); gap: 14px; }
+.mini { font-size: 0.9rem; }
+.mini .k { font-weight: 700; }
+ul.tight { margin: 8px 0 0; padding-left: 18px; }
+ul.tight li { margin: 4px 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--cp-border); vertical-align: top; }
+th { color: var(--cp-text-soft); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .4px; }
+.status { font-weight: 700; white-space: nowrap; }
+.ok { color: var(--cp-success); }
+.bad { color: var(--cp-danger); }
+.warn { color: var(--cp-warning); }
+code { font-family: Consolas, "Courier New", Courier, monospace; background: var(--cp-surface-soft); padding: 1px 5px; border-radius: 6px; font-size: 0.82em; }
+.role { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--cp-border); }
+.role:last-child { border-bottom: 0; }
+.role .icon { font-size: 1.3rem; }
+.role .who { font-weight: 700; }
+.foot { margin-top: 28px; color: var(--cp-text-soft); font-size: 0.8rem; text-align: center; }
+.key-note { background: var(--cp-accent-soft); border: 1px solid var(--cp-accent); border-radius: 12px; padding: 10px 14px; font-size: 0.86rem; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="pill">🚀 agent-framework-agent-basic-responses · version 13</span>
+  <h1>🧩 Hosted Agent v13 — Tech Stack &amp; Journey</h1>
+  <p class="sub">Private Microsoft Foundry (<code>foundry64dp / project64dp</code>, swedencentral, VPN-only) · mode <code>ci_client_container</code> + <code>CI_INCLUDE_TOOLBOX=1</code></p>
+
+  <div class="legend">
+    <span><i class="dot foundry"></i> Runs in Foundry (private)</span>
+    <span><i class="dot client"></i> Runs on the client (local UI / caller)</span>
+    <span><i class="dot identity"></i> Identity / RBAC boundary</span>
+  </div>
+
+  <!-- ===================== LIVE ARCHITECTURE ===================== -->
+  <h2>🗺️ How v13 fits together</h2>
+
+  <div class="flow">
+
+    <div class="lane client-lane">
+      <div class="lane-title">🖥️ CLIENT (local) — just the caller &amp; file-fetcher</div>
+      <div class="nodes">
+        <div class="node">
+          <div class="n-title">🧑‍💻 User <span class="tag client">client</span></div>
+          <div class="n-body">Types a request; completes OAuth consent in the browser.</div>
+        </div>
+        <div class="node">
+          <div class="n-title">🌐 Flask UI <span class="tag client">client</span></div>
+          <div class="n-body">Port 5005. Creates the container (user identity), injects <code>USE_CONTAINER_ID</code> + optional template path, renders consent link, shows tool activity + CI evidence, downloads files.</div>
+        </div>
+        <div class="node">
+          <div class="n-title">📤 Template upload <span class="tag client">client</span></div>
+          <div class="n-body">Optional <code>.pptx/.potx</code> → pushed into the Foundry container so the skill can use it.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrows">⬇️ &nbsp; HTTPS · Bearer <code>ai.azure.com/.default</code> &nbsp; ⬇️</div>
+
+    <div class="lane foundry-lane">
+      <div class="lane-title">☁️ MICROSOFT FOUNDRY (private) — everything actually executes here</div>
+      <div class="nodes">
+        <div class="node">
+          <div class="n-title">🤖 Hosted Agent <span class="tag foundry">foundry</span></div>
+          <div class="n-body">Agent Framework on <code>ResponsesHostServer</code>. Bundled skill injected at startup. Deployed via <code>azd</code>.</div>
+        </div>
+        <div class="node">
+          <div class="n-title">🧠 gpt-4.1 model <span class="tag foundry">foundry</span></div>
+          <div class="n-body">Foundry model deployment that drives tool choice + narration.</div>
+        </div>
+      </div>
+      <div class="arrows">⬇️ &nbsp; per-request tools injected via <code>Agent.run(tools=[…])</code> &nbsp; ⬇️</div>
+      <div class="nodes">
+        <div class="node">
+          <div class="n-title">⚙️ Code Interpreter <span class="tag foundry">foundry</span></div>
+          <div class="n-body">Real SDK <code>CodeInterpreterTool(container=cntr_…)</code> bound to the client-made container. Runs Python, writes <code>.pptx</code>. Needs <code>disable_instrumentation()</code>.</div>
+        </div>
+        <div class="node">
+          <div class="n-title">📦 CI Container <span class="tag foundry">foundry</span></div>
+          <div class="n-body">Created by the <b>client</b> at <code>/openai/v1/containers</code>; files live &amp; execute here. Idle-expires ~20 min.</div>
+        </div>
+        <div class="node">
+          <div class="n-title">🧰 Starburst Toolbox (MCP) <span class="tag foundry">foundry</span></div>
+          <div class="n-body">Managed MCP endpoint <code>starburst-tb</code>. Brokers OAuth consent server-side → emits <code>oauth_consent_request</code>.</div>
+        </div>
+      </div>
+      <div class="arrows">⬇️</div>
+      <div class="nodes">
+        <div class="node">
+          <div class="n-title">🗄️ Starburst data <span class="tag foundry">foundry</span></div>
+          <div class="n-body">Reached through the toolbox after consent (<code>starburst___executeQuery</code>).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrows">⬆️ &nbsp; response + <code>/containers/{id}/files/{file}/content</code> download &nbsp; ⬆️</div>
+  </div>
+
+  <div class="key-note">🔑 <b>Key insight:</b> the container is <b>created by the client</b> (user identity) but <b>used &amp; executed inside Foundry</b>. The managed identity never creates a container — that sidesteps the RBAC 403 that blocked v10.</div>
+
+  <!-- ===================== PUZZLE PIECES ===================== -->
+  <h2>🧩 The puzzle pieces (what makes v13 work)</h2>
+  <div class="grid2">
+    <div class="card mini">
+      <div class="k">📜 Bundled skill (direct injection)</div>
+      <ul class="tight">
+        <li><code>pptx-generation</code> SKILL.md read at startup</li>
+        <li>Template mode <b>or</b> no-template style mode</li>
+        <li>Immune to the isolated-project skills-API write gap</li>
+      </ul>
+    </div>
+    <div class="card mini">
+      <div class="k">🧰 Foundry Toolbox for OAuth MCP</div>
+      <ul class="tight">
+        <li>Hosted runtime can't surface consent from a raw code-attached MCP</li>
+        <li>Toolbox brokers consent → <code>oauth_consent_request</code></li>
+        <li>Client renders the sign-in link</li>
+      </ul>
+    </div>
+    <div class="card mini">
+      <div class="k">⚙️ Real Code Interpreter</div>
+      <ul class="tight">
+        <li>Must use the real SDK tool (dict tool = silent no-op)</li>
+        <li><code>disable_instrumentation()</code> avoids the JSON-serialize crash</li>
+        <li>Bound to an explicit <code>container_id</code></li>
+      </ul>
+    </div>
+    <div class="card mini">
+      <div class="k">📦 Client-created container</div>
+      <ul class="tight">
+        <li>Created at the <b>project-scoped</b> OpenAI endpoint</li>
+        <li>Passed per request as <code>USE_CONTAINER_ID=cntr_…</code></li>
+        <li>Enables real file download (<code>PK</code>-valid <code>.pptx</code>)</li>
+      </ul>
+    </div>
+    <div class="card mini">
+      <div class="k">🔎 Observability hacks (new in v13)</div>
+      <ul class="tight">
+        <li><code>SKILL_USED:</code> marker → skill badge</li>
+        <li>Container file-delta → “CI produced file” evidence</li>
+        <li>Per-turn debug JSON in <code>ui/logs/</code></li>
+      </ul>
+    </div>
+    <div class="card mini">
+      <div class="k">🔒 Private networking</div>
+      <ul class="tight">
+        <li>Foundry <code>publicNetworkAccess=Disabled</code></li>
+        <li>VPN / private endpoint required to reach it</li>
+        <li>Private DNS resolves to a 192.168.x address</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===================== WHAT WE TRIED ===================== -->
+  <h2>🧪 What we tried along the way (v1 → v13)</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Ver</th><th>Added</th><th>Result</th><th>Why we moved on</th></tr></thead>
+      <tbody>
+        <tr><td>v1</td><td>Direct-injection skill only</td><td class="status ok">✅ works</td><td>Needed Starburst data too</td></tr>
+        <tr><td>v2</td><td>Starburst MCP attached in code</td><td class="status bad">❌ consent dropped</td><td>Hosted runtime can't surface <code>oauth_consent_request</code></td></tr>
+        <tr><td>v3</td><td>Starburst via Foundry toolbox</td><td class="status bad">❌ 401</td><td>Agent identity had no Foundry role</td></tr>
+        <tr><td>v5</td><td>Skill + toolbox (OAuth)</td><td class="status ok">✅ works</td><td>Wanted Code Interpreter file-gen</td></tr>
+        <tr><td>v7</td><td>Code Interpreter (dict tool)</td><td class="status warn">⚠️ false positive</td><td>CI never actually executed (SHA-256 proof)</td></tr>
+        <tr><td>v9</td><td>CI + container at startup</td><td class="status bad">❌ 424</td><td>Sync container-create blocked readiness</td></tr>
+        <tr><td>v10</td><td>Lazy container-create</td><td class="status bad">❌ 403</td><td>Agent identity can't create containers</td></tr>
+        <tr><td>v11</td><td>Client-created container</td><td class="status ok">✅ works</td><td>Wanted toolbox + consent in one agent</td></tr>
+        <tr><td>v12</td><td>Client container + toolbox + UI</td><td class="status ok">✅ works</td><td>Skill template-only; no CI evidence</td></tr>
+        <tr><td><b>v13</b></td><td><b>No-template skill + upload + CI/skill logging</b></td><td class="status ok">✅ current</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===================== ROLES ===================== -->
+  <h2>🛡️ Identities &amp; roles required</h2>
+  <div class="card">
+    <div class="role">
+      <span class="icon">🧑‍💼</span>
+      <div>
+        <div class="who">User identity (you) <i class="dot identity"></i></div>
+        <div class="n-body"><code>Foundry User</code> on <code>project64dp</code> → can create containers, upload files, call the responses endpoint. This is why the <b>client</b> creates the container.</div>
+      </div>
+    </div>
+    <div class="role">
+      <span class="icon">🤖</span>
+      <div>
+        <div class="who">Agent managed identity <i class="dot identity"></i></div>
+        <div class="n-body">Object id <code>06a1addb-…-21337c6467cb</code>. Needs <code>Foundry User</code> to call the toolbox MCP (fixed the v3 401). <b>Cannot</b> create containers even with <code>Foundry Project Manager</code> — hence the client-container workaround.</div>
+      </div>
+    </div>
+    <div class="role">
+      <span class="icon">🗃️</span>
+      <div>
+        <div class="who">Project managed identity</div>
+        <div class="n-body"><code>Storage Blob Data Contributor</code> on the project storage → agent runtime reads/attaches/downloads blobs privately.</div>
+      </div>
+    </div>
+    <div class="role">
+      <span class="icon">🔐</span>
+      <div>
+        <div class="who">OAuth pre-authorization (Starburst)</div>
+        <div class="n-body">MCP resource app pre-authorizes the OAuth client for <code>user_impersonation</code> → consent auto-granted without a directory admin.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    🧭 Foundry executes the agent, model, Code Interpreter, container, and toolbox. The local UI only calls the API and downloads files. · Diagram for the AlignTech skills session.
+  </div>
+
+</div>
+</body>
+</html>

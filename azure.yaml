@@ -20,12 +20,16 @@ services:
                 memory: 4Gi
         description: A basic Agent Framework agent hosted by Foundry.
         environmentVariables:
+            - name: FOUNDRY_PROJECT_ENDPOINT
+              value: ${FOUNDRY_PROJECT_ENDPOINT}
             - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
               value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
             - name: AGENT_TOOL_MODE
               value: ${AGENT_TOOL_MODE}
             - name: CI_INCLUDE_TOOLBOX
               value: ${CI_INCLUDE_TOOLBOX}
+            - name: TOOLBOX_MCP_ENDPOINT
+              value: ${TOOLBOX_MCP_ENDPOINT}
         kind: hosted
         metadata:
             tags:
@@ -41,6 +45,7 @@ services:
     ai-project:
         host: azure.ai.project
         deployments: []
-        endpoint: https://YOUR_FOUNDRY_ACCOUNT.services.ai.azure.com/api/projects/YOUR_PROJECT
+        # Resolved from the azd env value set via `azd env set FOUNDRY_PROJECT_ENDPOINT ...`.
+        endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
 infra:
     provider: microsoft.foundry

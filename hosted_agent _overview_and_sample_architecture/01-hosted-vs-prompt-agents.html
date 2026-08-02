@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hosted Agents vs Prompt Agents — Behind the Scenes</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+      const theme = param || "light";
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef; --cp-bg-elevated: #fcfbf8; --cp-surface: #ffffff; --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede; --cp-border-strong: #919191; --cp-text: #242424; --cp-text-muted: #5c5c5c; --cp-text-soft: #6f6f6f;
+      --cp-accent: #5c2d91; --cp-accent-hover: #4c2478; --cp-accent-soft: #f1eaf8; --cp-accent-fg: #ffffff;
+      --cp-success: #107c10; --cp-danger: #dc2626; --cp-warning: #b26a00; --cp-link: #0078d4;
+      --cp-link-soft: #eaf3fc; --cp-link-line: #b6d8f5; --cp-accent-line: #d9c6ec;
+      --cp-success-soft: #e6f4e6; --cp-success-line: #bfe3bf; --cp-warning-soft: #fff6e5; --cp-warning-line: #f0d9a6;
+      --cp-danger-soft: #fdeaea; --cp-danger-line: #f3c4c4;
+      --cp-shadow: 0 18px 48px rgba(0,0,0,0.12);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--cp-bg); color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+    .canvas { max-width: 1320px; margin: 0 auto; padding: 32px 28px 44px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 6px; }
+    h1 { margin: 0; font-size: 26px; line-height: 1.2; }
+    .sub { margin: 5px 0 0; color: var(--cp-text-muted); font-size: 14px; }
+    .legend { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; padding: 12px 16px; border: 1px solid var(--cp-border);
+      border-radius: 10px; background: var(--cp-surface); box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14); }
+    .legend-row { display: flex; align-items: center; gap: 9px; color: var(--cp-text-muted); font-size: 13px; }
+    .dot { width: 14px; height: 14px; border-radius: 50%; }
+    .dot.prompt { background: var(--cp-link); }
+    .dot.hosted { background: var(--cp-accent); }
+    .dot.shared { background: var(--cp-success); }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
+    .lane { position: relative; padding: 16px 18px 20px; overflow: hidden; border: 1px solid var(--cp-border);
+      border-radius: 16px; background: var(--cp-surface); box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14); }
+    .lane::before { position: absolute; top: 0; bottom: 0; left: 0; width: 6px; content: ""; }
+    .lane.prompt::before { background: var(--cp-link); }
+    .lane.hosted::before { background: var(--cp-accent); }
+    .lane-head { display: flex; align-items: center; gap: 10px; margin: 2px 0 4px 4px; }
+    .lane-badge { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px;
+      color: var(--cp-accent-fg); font-size: 15px; font-weight: 700; }
+    .prompt .lane-badge { background: var(--cp-link); }
+    .hosted .lane-badge { background: var(--cp-accent); }
+    .lane-title { font-size: 17px; font-weight: 700; }
+    .lane-tag { margin: 0 0 14px 6px; color: var(--cp-text-muted); font-size: 12.5px; }
+
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .step { position: relative; display: flex; gap: 11px; align-items: flex-start; padding: 11px 13px 11px 12px;
+      border: 1px solid var(--cp-border); border-radius: 10px; background: var(--cp-surface-soft); }
+    .prompt .step { background: var(--cp-link-soft); border-color: var(--cp-link-line); }
+    .hosted .step { background: var(--cp-accent-soft); border-color: var(--cp-accent-line); }
+    .step .num { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: 1px;
+      border-radius: 50%; color: var(--cp-accent-fg); font-size: 12px; font-weight: 700; }
+    .prompt .step .num { background: var(--cp-link); }
+    .hosted .step .num { background: var(--cp-accent); }
+    .step .icon { flex: 0 0 auto; width: 26px; height: 26px; margin-top: 1px; fill: none; stroke: currentColor;
+      stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+    .prompt .step .icon { color: var(--cp-link); }
+    .hosted .step .icon { color: var(--cp-accent); }
+    .step h3 { margin: 0 0 2px; font-size: 13.5px; line-height: 1.2; }
+    .step p { margin: 0; color: var(--cp-text-muted); font-size: 11.8px; line-height: 1.32; }
+    .step code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; background: var(--cp-surface);
+      border: 1px solid var(--cp-border); border-radius: 4px; padding: 0 3px; }
+
+    .who { margin-top: 22px; padding: 20px; border: 1px solid var(--cp-border); border-radius: 16px; background: var(--cp-bg-elevated); }
+    .who h2 { margin: 0 0 14px; font-size: 17px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--cp-border); vertical-align: top; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--cp-text-soft); }
+    td.k { font-weight: 600; color: var(--cp-text); width: 22%; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .pill.prompt { background: var(--cp-link-soft); color: var(--cp-link); border: 1px solid var(--cp-link-line); }
+    .pill.hosted { background: var(--cp-accent-soft); color: var(--cp-accent); border: 1px solid var(--cp-accent-line); }
+
+    .footer { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 22px; }
+    .callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--cp-border); border-radius: 10px;
+      background: var(--cp-surface); font-size: 13px; line-height: 1.4; }
+    .callout.warning { border-color: var(--cp-warning-line); background: var(--cp-warning-soft); }
+    .callout.success { border-color: var(--cp-success-line); background: var(--cp-success-soft); }
+    .callout-icon { flex: 0 0 auto; width: 24px; height: 24px; color: var(--cp-accent); fill: none; stroke: currentColor;
+      stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    .callout.warning .callout-icon { color: var(--cp-warning); }
+    .callout.success .callout-icon { color: var(--cp-success); }
+    .callout b { color: var(--cp-text); }
+    .callout ul { margin: 6px 0 0; padding-left: 16px; }
+    .callout li { margin: 3px 0; }
+    .callout code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; background: var(--cp-surface-soft);
+      border: 1px solid var(--cp-border); border-radius: 4px; padding: 0 4px; }
+    .note { margin-top: 16px; color: var(--cp-text-soft); font-size: 11.5px; line-height: 1.5; }
+
+    @media (max-width: 900px) { header { flex-direction: column; } .split { grid-template-columns: 1fr; } .footer { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="canvas">
+    <header>
+      <div>
+        <h1>Hosted agents vs prompt agents</h1>
+        <p class="sub">Behind the scenes — what actually runs, and why we build the hosted one with the Agent Framework</p>
+      </div>
+      <div class="legend" aria-label="Diagram legend">
+        <div class="legend-row"><span class="dot prompt"></span>Prompt agent (declarative)</div>
+        <div class="legend-row"><span class="dot hosted"></span>Hosted agent (our code)</div>
+      </div>
+    </header>
+
+    <div class="split">
+      <!-- PROMPT AGENT -->
+      <section class="lane prompt">
+        <div class="lane-head">
+          <span class="lane-badge">P</span>
+          <span class="lane-title">Prompt agent</span>
+        </div>
+        <p class="lane-tag">No code. You describe it; Foundry runs it on a shared, managed runtime.</p>
+        <div class="stack">
+          <div class="step">
+            <span class="num">1</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 12h6M9 16h6M9 8h3"/></svg>
+            <div><h3>You author a definition</h3><p>Instructions + model + tools, picked in the portal / API. No repo, no image.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">2</span>
+            <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>
+            <div><h3>Foundry-managed runtime</h3><p>Microsoft hosts the agent loop for you. Nothing you deploy or scale.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">3</span>
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
+            <div><h3>Built-in tool loop</h3><p>The service plans, calls listed tools, and returns the answer. You can't change the loop.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">4</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg>
+            <div><h3>Runs into private limits</h3><p>In private Foundry, code-interpreter file download &amp; skills aren't fully supported.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HOSTED AGENT -->
+      <section class="lane hosted">
+        <div class="lane-head">
+          <span class="lane-badge">H</span>
+          <span class="lane-title">Hosted agent</span>
+        </div>
+        <p class="lane-tag">We write the agent in the Microsoft <b>Agent Framework</b>; Foundry hosts our container.</p>
+        <div class="stack">
+          <div class="step">
+            <span class="num">1</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6"/></svg>
+            <div><h3>We write the agent in code</h3><p><code>Agent</code> + <code>FoundryChatClient</code> + tools (<code>MCPStreamableHTTPTool</code>, <code>CodeInterpreterTool</code>), served by <code>ResponsesHostServer</code>.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">2</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M4 7l8-4 8 4v10l-8 4-8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
+            <div><h3><code>azd deploy</code> → your container</h3><p>Packaged &amp; deployed to Foundry as your image/code, running under a <b>managed identity</b>.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">3</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/><circle cx="12" cy="12" r="3"/></svg>
+            <div><h3>We own the tool loop</h3><p>Custom orchestration: OAuth-consent MCP via a <b>toolbox</b>, pre-created code-interpreter container, guardrails.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">4</span>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+            <div><h3>Gets around private limits</h3><p>The control we gain is exactly what lets file download &amp; skills work in private Foundry.</p></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="who">
+      <h2>Side by side</h2>
+      <table>
+        <thead>
+          <tr><th>Dimension</th><th><span class="pill prompt">Prompt agent</span></th><th><span class="pill hosted">Hosted agent</span></th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">How you build it</td><td>Declarative: instructions + tool list</td><td>Code with the Agent Framework (Python)</td></tr>
+          <tr><td class="k">Where it runs</td><td>Foundry's shared managed runtime</td><td>Your container, hosted by Foundry (you pick CPU/memory)</td></tr>
+          <tr><td class="k">Identity</td><td>Service-managed</td><td>Your managed identity</td></tr>
+          <tr><td class="k">Control of the loop</td><td>Fixed — service-defined</td><td>Full — you write the orchestration</td></tr>
+          <tr><td class="k">MCP + OAuth consent</td><td>Limited</td><td>Yes, via the toolbox wrapper</td></tr>
+          <tr><td class="k">Code interpreter in private Foundry</td><td>File download / skills not fully supported</td><td>Works — you can pre-create &amp; read the container</td></tr>
+          <tr><td class="k">Effort to stand up</td><td>Low — fastest path</td><td>Higher — build, deploy, maintain</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="footer">
+      <div class="callout success">
+        <svg class="callout-icon" viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 4-3 7-8 8-5-1-8-4-8-8V7z"/><path d="M9 12l2 2 4-4"/></svg>
+        <div>
+          <b>Why we chose hosted for AlignTech</b>
+          <ul>
+            <li>Private Foundry blocks code-interpreter <b>file download</b> and skills on a prompt agent.</li>
+            <li>Hosted + Agent Framework gives us the control to <b>work around</b> those limits today.</li>
+            <li>Same Foundry functionality underneath — no exotic custom tools.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout warning">
+        <svg class="callout-icon" viewBox="0 0 24 24"><path d="M12 3l9 16H3z"/><path d="M12 9v5M12 17h.01"/></svg>
+        <div>
+          <b>The trade-off</b>
+          <ul>
+            <li>Hosted = we own a deployable, so there's a <b>runtime to host</b> (compute cost + upkeep).</li>
+            <li>If/when private-endpoint support ships for code interpreter, we could move back to a prompt agent.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">Prompt agent = declarative agent defined by instructions + tools, run on Foundry's managed runtime. Hosted agent = an Agent Framework app packaged and deployed to Foundry (via <code>azd</code> or the Foundry Toolkit), running as your own container under a managed identity. Both call the same Foundry models and tools.</p>
+  </main>
+</body>
+</html>
