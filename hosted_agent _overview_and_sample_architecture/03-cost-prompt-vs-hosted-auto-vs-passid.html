@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cost Breakdown — Prompt vs Hosted Agent, and Auto vs Pass-ID</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+      const theme = param || "light";
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef; --cp-bg-elevated: #fcfbf8; --cp-surface: #ffffff; --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede; --cp-border-strong: #919191; --cp-text: #242424; --cp-text-muted: #5c5c5c; --cp-text-soft: #6f6f6f;
+      --cp-accent: #5c2d91; --cp-accent-hover: #4c2478; --cp-accent-soft: #f1eaf8; --cp-accent-fg: #ffffff;
+      --cp-success: #107c10; --cp-danger: #dc2626; --cp-warning: #b26a00; --cp-link: #0078d4;
+      --cp-link-soft: #eaf3fc; --cp-link-line: #b6d8f5; --cp-accent-line: #d9c6ec;
+      --cp-success-soft: #e6f4e6; --cp-success-line: #bfe3bf; --cp-warning-soft: #fff6e5; --cp-warning-line: #f0d9a6;
+      --cp-danger-soft: #fdeaea; --cp-danger-line: #f3c4c4; --cp-neutral-soft: #eef0f2;
+      --cp-shadow: 0 18px 48px rgba(0,0,0,0.12);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--cp-bg); color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+    .canvas { max-width: 1320px; margin: 0 auto; padding: 32px 28px 44px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 6px; }
+    h1 { margin: 0; font-size: 26px; line-height: 1.2; }
+    .sub { margin: 5px 0 0; color: var(--cp-text-muted); font-size: 14px; }
+    .legend { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; padding: 12px 16px; border: 1px solid var(--cp-border);
+      border-radius: 10px; background: var(--cp-surface); box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14); }
+    .legend-row { display: flex; align-items: center; gap: 9px; color: var(--cp-text-muted); font-size: 13px; }
+    .chip { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 15px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+    .chip.same { background: var(--cp-neutral-soft); color: var(--cp-text-muted); border: 1px solid var(--cp-border); }
+    .chip.add { background: var(--cp-warning-soft); color: var(--cp-warning); border: 1px solid var(--cp-warning-line); }
+    .chip.none { background: var(--cp-success-soft); color: var(--cp-success); border: 1px solid var(--cp-success-line); }
+
+    .matrix { margin-top: 22px; border: 1px solid var(--cp-border); border-radius: 16px; overflow: hidden;
+      background: var(--cp-surface); box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th { background: var(--cp-bg-elevated); text-align: left; padding: 13px 14px; font-size: 12.5px; border-bottom: 1px solid var(--cp-border); }
+    thead th.grp { text-align: center; border-left: 1px solid var(--cp-border); }
+    thead th small { display: block; font-weight: 400; color: var(--cp-text-soft); font-size: 11px; margin-top: 2px; }
+    tbody td { padding: 12px 14px; border-bottom: 1px solid var(--cp-border); vertical-align: top; line-height: 1.35; }
+    tbody td.k { font-weight: 600; width: 24%; }
+    tbody td.c { border-left: 1px solid var(--cp-border); }
+    tbody tr:last-child td { border-bottom: none; }
+    .cell { display: flex; gap: 8px; align-items: flex-start; }
+    .cell .lbl { font-size: 12.4px; }
+    .cell .lbl b { color: var(--cp-text); }
+    .cell small { display: block; color: var(--cp-text-soft); font-size: 11px; margin-top: 1px; }
+    code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; background: var(--cp-surface-soft);
+      border: 1px solid var(--cp-border); border-radius: 4px; padding: 0 4px; }
+    tr.total td { background: var(--cp-bg-elevated); font-weight: 600; }
+
+    .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 22px; }
+    .kcard { padding: 16px 16px 14px; border: 1px solid var(--cp-border); border-radius: 12px; background: var(--cp-surface); }
+    .kcard h3 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+    .kcard .icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    .kcard p { margin: 0; font-size: 12.4px; color: var(--cp-text-muted); line-height: 1.4; }
+    .kcard.blue { border-color: var(--cp-link-line); background: var(--cp-link-soft); } .kcard.blue .icon { color: var(--cp-link); }
+    .kcard.purple { border-color: var(--cp-accent-line); background: var(--cp-accent-soft); } .kcard.purple .icon { color: var(--cp-accent); }
+    .kcard.green { border-color: var(--cp-success-line); background: var(--cp-success-soft); } .kcard.green .icon { color: var(--cp-success); }
+
+    .bignote { display: flex; gap: 12px; align-items: flex-start; margin-top: 22px; padding: 16px 18px; border-radius: 12px;
+      border: 1px solid var(--cp-success-line); background: var(--cp-success-soft); font-size: 13.5px; line-height: 1.45; }
+    .bignote .icon { flex: 0 0 auto; width: 26px; height: 26px; color: var(--cp-success); fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    .bignote b { color: var(--cp-text); }
+    .note { margin-top: 16px; color: var(--cp-text-soft); font-size: 11.5px; line-height: 1.5; }
+
+    @media (max-width: 960px) { .cards { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { header { flex-direction: column; } .matrix { overflow-x: auto; } table { min-width: 760px; } }
+  </style>
+</head>
+<body>
+  <main class="canvas">
+    <header>
+      <div>
+        <h1>What actually costs money</h1>
+        <p class="sub">Prompt agent vs hosted agent — and within hosted, container <b>auto</b> vs <b>pass-ID</b></p>
+      </div>
+      <div class="legend" aria-label="Cost legend">
+        <div class="legend-row"><span class="chip same">=</span>Same in both</div>
+        <div class="legend-row"><span class="chip add">+</span>Added cost</div>
+        <div class="legend-row"><span class="chip none">0</span>No extra cost</div>
+      </div>
+    </header>
+
+    <section class="matrix">
+      <table>
+        <thead>
+          <tr>
+            <th>Cost component</th>
+            <th class="grp">Prompt agent<small>+ Starburst MCP + code interpreter</small></th>
+            <th class="grp">Hosted · auto<small>container: auto</small></th>
+            <th class="grp">Hosted · pass-ID<small>what we run today</small></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="k">Model tokens</td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Same model, same rate</span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Same</span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Same</span></div></td>
+          </tr>
+          <tr>
+            <td class="k">Code interpreter session</td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl"><b>~$0.03 / session</b><small>1 hr active · 30-min idle · reuse charged once</small></span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Identical session charge</span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Identical session charge</span></div></td>
+          </tr>
+          <tr>
+            <td class="k">Container "hack" surcharge</td>
+            <td class="c"><div class="cell"><span class="chip none">0</span><span class="lbl">n/a</span></div></td>
+            <td class="c"><div class="cell"><span class="chip none">0</span><span class="lbl">None — same sandbox</span></div></td>
+            <td class="c"><div class="cell"><span class="chip none">0</span><span class="lbl"><b>None</b><small>just one extra <code>POST /containers</code> call</small></span></div></td>
+          </tr>
+          <tr>
+            <td class="k">Starburst MCP call</td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">No Foundry per-call fee</span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Same</span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Same</span></div></td>
+          </tr>
+          <tr>
+            <td class="k">MCP server hosting</td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Your App Service / Container App</span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Same</span></div></td>
+            <td class="c"><div class="cell"><span class="chip same">=</span><span class="lbl">Same</span></div></td>
+          </tr>
+          <tr>
+            <td class="k">Agent runtime compute</td>
+            <td class="c"><div class="cell"><span class="chip none">0</span><span class="lbl"><b>None</b><small>runs on Foundry's shared managed runtime</small></span></div></td>
+            <td class="c"><div class="cell"><span class="chip add">+</span><span class="lbl"><b>Hosted runtime</b><small>your container, CPU/memory you pick</small></span></div></td>
+            <td class="c"><div class="cell"><span class="chip add">+</span><span class="lbl"><b>Hosted runtime</b><small>same as auto — the one real delta</small></span></div></td>
+          </tr>
+          <tr class="total">
+            <td class="k">Net difference</td>
+            <td class="c">Baseline</td>
+            <td class="c">+ hosted runtime only</td>
+            <td class="c">+ hosted runtime only<br><small style="color:var(--cp-text-soft);font-weight:400">(pass-ID adds $0 over auto)</small></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="cards">
+      <div class="kcard blue">
+        <h3><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Prompt vs hosted</h3>
+        <p>The <b>only</b> real cost gap is the <b>hosted-agent runtime</b> — your container hosted by Foundry. Everything else (tokens, code-interpreter session, MCP) is the same.</p>
+      </div>
+      <div class="kcard purple">
+        <h3><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/></svg>Auto vs pass-ID</h3>
+        <p>Same sandbox, same <b>$0.03/session</b>. Pass-ID is a <b>functional</b> workaround (file download + avoids RBAC 403), <b>not</b> a pricier tier. Cost delta ≈ <b>$0</b>.</p>
+      </div>
+      <div class="kcard green">
+        <h3><svg class="icon" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>Latency, not a VM</h3>
+        <p>No VM you spin up. Cold start is a <b>few seconds, once per session</b>, then warm reuse for the hour — not the minutes Jay was worried about.</p>
+      </div>
+    </div>
+
+    <div class="bignote">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 4-3 7-8 8-5-1-8-4-8-8V7z"/><path d="M9 12l2 2 4-4"/></svg>
+      <div><b>Bottom line for Jay:</b> the code-interpreter container hack adds <b>no extra cost or pricing tier</b> over normal code interpreter — it's the same session either way. The single genuine cost difference between what we run now and a plain prompt agent is the <b>hosted-agent runtime compute</b> (needed to work around private-endpoint limits), and latency is seconds-per-session, then warm.</div>
+    </div>
+
+    <p class="note">~$0.03 per code-interpreter session is the published Azure OpenAI / Foundry rate — confirm exact figures for your region on the <a href="https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/">Azure OpenAI pricing page</a>. Hosted-agent runtime compute is billed on the CPU/memory size chosen at deploy time. Figures here compare cost <i>structure</i>, not a specific monthly bill.</p>
+  </main>
+</body>
+</html>

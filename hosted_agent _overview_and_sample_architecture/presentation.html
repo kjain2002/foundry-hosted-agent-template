@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AlignTech · Hosted Agents — Client Walkthrough</title>
+  <style>
+    :root {
+      --cp-bg: #f7f4ef; --cp-surface: #ffffff; --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede; --cp-border-strong: #919191; --cp-text: #242424; --cp-text-muted: #5c5c5c; --cp-text-soft: #6f6f6f;
+      --cp-accent: #5c2d91; --cp-accent-hover: #4c2478; --cp-accent-soft: #f1eaf8; --cp-accent-fg: #ffffff; --cp-accent-line: #d9c6ec;
+      --cp-shadow: 0 18px 48px rgba(0,0,0,0.14);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; background: var(--cp-bg); color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased;
+      display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* Top bar */
+    .bar { flex: 0 0 auto; display: flex; align-items: center; gap: 16px; padding: 10px 18px;
+      background: var(--cp-surface); border-bottom: 1px solid var(--cp-border); box-shadow: 0 1px 3px rgba(0,0,0,0.06); z-index: 5; }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .brand .mark { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; background: var(--cp-accent); color: var(--cp-accent-fg);
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; }
+    .brand .titles { min-width: 0; }
+    .brand .k { font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--cp-text-soft); line-height: 1; }
+    .brand .t { font-size: 15px; font-weight: 700; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .spacer { flex: 1 1 auto; }
+
+    .counter { flex: 0 0 auto; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--cp-text-muted); font-weight: 600; }
+    .counter b { color: var(--cp-text); }
+
+    .btn { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 12px;
+      border: 1px solid var(--cp-border); border-radius: 8px; background: var(--cp-surface); color: var(--cp-text); font-size: 13px; font-weight: 600;
+      cursor: pointer; user-select: none; transition: background 0.12s, border-color 0.12s, opacity 0.12s; }
+    .btn:hover:not(:disabled) { background: var(--cp-accent-soft); border-color: var(--cp-accent-line); }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn.icon { width: 34px; padding: 0; }
+    .btn.primary { background: var(--cp-accent); border-color: var(--cp-accent); color: var(--cp-accent-fg); }
+    .btn.primary:hover:not(:disabled) { background: var(--cp-accent-hover); border-color: var(--cp-accent-hover); }
+    .btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Stage */
+    .stage { flex: 1 1 auto; position: relative; overflow: hidden; }
+    .stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--cp-bg);
+      opacity: 0; visibility: hidden; transition: opacity 0.28s ease; }
+    .stage iframe.active { opacity: 1; visibility: visible; }
+
+    /* edge click zones for prev/next */
+    .edge { position: absolute; top: 0; bottom: 0; width: 9%; max-width: 90px; z-index: 3; cursor: pointer; border: 0; background: transparent;
+      display: flex; align-items: center; justify-content: center; color: var(--cp-border-strong); opacity: 0; transition: opacity 0.15s; }
+    .edge:hover:not(:disabled) { opacity: 1; background: linear-gradient(var(--dir), rgba(0,0,0,0.06), transparent); }
+    .edge:disabled { cursor: default; }
+    .edge.prev { left: 0; --dir: to right; }
+    .edge.next { right: 0; --dir: to left; }
+    .edge svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+      background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 50%; padding: 7px; box-shadow: var(--cp-shadow); }
+
+    /* Bottom dots */
+    .dots { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 11px 18px;
+      background: var(--cp-surface); border-top: 1px solid var(--cp-border); }
+    .dot { display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 9px; border: 1px solid var(--cp-border); border-radius: 20px;
+      background: var(--cp-surface); cursor: pointer; font-size: 12px; color: var(--cp-text-muted); transition: all 0.14s; max-width: 260px; }
+    .dot .n { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%;
+      background: var(--cp-surface-soft); color: var(--cp-text-soft); font-size: 11px; font-weight: 700; flex: 0 0 auto; }
+    .dot .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dot:hover { border-color: var(--cp-accent-line); background: var(--cp-accent-soft); }
+    .dot.active { border-color: var(--cp-accent); background: var(--cp-accent-soft); color: var(--cp-accent); font-weight: 600; }
+    .dot.active .n { background: var(--cp-accent); color: var(--cp-accent-fg); }
+
+    .hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 4;
+      font-size: 11.5px; color: var(--cp-text-soft); background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 20px;
+      padding: 5px 12px; box-shadow: var(--cp-shadow); opacity: 0; transition: opacity 0.4s; pointer-events: none; }
+    .hint.show { opacity: 1; }
+    kbd { font-family: inherit; font-size: 10.5px; background: var(--cp-surface-soft); border: 1px solid var(--cp-border);
+      border-radius: 4px; padding: 0 5px; margin: 0 1px; }
+
+    @media (max-width: 720px) {
+      .dot .lbl { display: none; } .dot { padding: 5px; } .brand .t { font-size: 13px; } .counter { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="brand">
+      <div class="mark">A</div>
+      <div class="titles">
+        <div class="k">AlignTech × Microsoft</div>
+        <div class="t" id="slideTitle">Hosted Agents — Client Walkthrough</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="counter"><b id="cur">1</b> / <span id="total">4</span></div>
+    <button class="btn icon" id="prevBtn" title="Previous (←)" aria-label="Previous slide">
+      <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <button class="btn primary icon" id="nextBtn" title="Next (→)" aria-label="Next slide">
+      <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+    <button class="btn icon" id="fsBtn" title="Fullscreen (F)" aria-label="Toggle fullscreen">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="edge prev" id="edgePrev" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="edge next" id="edgeNext" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+    <div class="hint" id="hint">Use <kbd>←</kbd> <kbd>→</kbd> to navigate · <kbd>F</kbd> fullscreen</div>
+  </div>
+
+  <div class="dots" id="dots"></div>
+
+  <script>
+    const slides = [
+      { src: "01-hosted-vs-prompt-agents.html",             title: "Hosted vs Prompt Agents",       label: "Hosted vs Prompt" },
+      { src: "02-container-auto-vs-passid.html",            title: "The Code-Interpreter Container", label: "Container & VM" },
+      { src: "03-cost-prompt-vs-hosted-auto-vs-passid.html", title: "What Actually Costs Money",      label: "Cost Breakdown" },
+      { src: "v13-simple-infographic.html",                 title: "How the Agent Is Built",         label: "How It's Built" },
+    ];
+    const THEME = "light"; // keep a consistent look for the client
+    const stage = document.getElementById("stage");
+    const dotsWrap = document.getElementById("dots");
+    const titleEl = document.getElementById("slideTitle");
+    const curEl = document.getElementById("cur");
+    const totalEl = document.getElementById("total");
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const edgePrev = document.getElementById("edgePrev");
+    const edgeNext = document.getElementById("edgeNext");
+    const fsBtn = document.getElementById("fsBtn");
+    const hint = document.getElementById("hint");
+
+    const frames = [];
+    const loaded = [];
+    let idx = 0;
+
+    totalEl.textContent = slides.length;
+
+    // Build iframes (lazy: set src when first shown) + dots
+    slides.forEach((s, i) => {
+      const f = document.createElement("iframe");
+      f.setAttribute("title", s.title);
+      f.dataset.src = s.src + (s.src.includes("?") ? "&" : "?") + "clawpilotTheme=" + THEME;
+      stage.insertBefore(f, document.getElementById("hint"));
+      frames.push(f);
+      loaded.push(false);
+
+      const d = document.createElement("button");
+      d.className = "dot";
+      d.innerHTML = '<span class="n">' + (i + 1) + '</span><span class="lbl">' + s.label + "</span>";
+      d.addEventListener("click", () => go(i));
+      dotsWrap.appendChild(d);
+    });
+    const dotEls = Array.from(dotsWrap.children);
+
+    function ensureLoaded(i) {
+      if (!loaded[i]) { frames[i].src = frames[i].dataset.src; loaded[i] = true; }
+    }
+
+    function render() {
+      frames.forEach((f, i) => f.classList.toggle("active", i === idx));
+      dotEls.forEach((d, i) => d.classList.toggle("active", i === idx));
+      titleEl.textContent = slides[idx].title;
+      curEl.textContent = idx + 1;
+      prevBtn.disabled = edgePrev.disabled = idx === 0;
+      nextBtn.disabled = edgeNext.disabled = idx === slides.length - 1;
+      // preload current + neighbors for snappy nav
+      ensureLoaded(idx);
+      if (idx + 1 < slides.length) ensureLoaded(idx + 1);
+      if (idx - 1 >= 0) ensureLoaded(idx - 1);
+      if (history.replaceState) history.replaceState(null, "", "#" + (idx + 1));
+    }
+
+    function go(i) { idx = Math.max(0, Math.min(slides.length - 1, i)); render(); }
+    function next() { if (idx < slides.length - 1) go(idx + 1); }
+    function prev() { if (idx > 0) go(idx - 1); }
+
+    prevBtn.addEventListener("click", prev);
+    nextBtn.addEventListener("click", next);
+    edgePrev.addEventListener("click", prev);
+    edgeNext.addEventListener("click", next);
+
+    fsBtn.addEventListener("click", () => {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+      else document.exitFullscreen?.();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { next(); e.preventDefault(); }
+      else if (e.key === "ArrowLeft" || e.key === "PageUp") { prev(); e.preventDefault(); }
+      else if (e.key === "Home") { go(0); e.preventDefault(); }
+      else if (e.key === "End") { go(slides.length - 1); e.preventDefault(); }
+      else if (e.key === "f" || e.key === "F") { fsBtn.click(); }
+    });
+
+    // start from hash if present (#2 -> slide 2)
+    const h = parseInt((location.hash || "").replace("#", ""), 10);
+    if (!isNaN(h) && h >= 1 && h <= slides.length) idx = h - 1;
+    render();
+
+    // brief keyboard hint on load
+    hint.classList.add("show");
+    setTimeout(() => hint.classList.remove("show"), 3800);
+  </script>
+</body>
+</html>

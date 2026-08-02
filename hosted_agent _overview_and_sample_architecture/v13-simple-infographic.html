@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hosted Agent v13 — How It's Built</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+    const theme =
+      param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef;
+  --cp-bg-elevated: #fcfbf8;
+  --cp-surface: #ffffff;
+  --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede;
+  --cp-border-strong: #919191;
+  --cp-text: #242424;
+  --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b;
+  --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08);
+  --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a;
+  --cp-danger: #dc2626;
+  --cp-warning: #f59e0b;
+  --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-panel: rgba(255, 255, 255, 0.86);
+  --cp-panel-strong: rgba(255, 255, 255, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.55);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a;
+  --cp-bg-elevated: #343231;
+  --cp-surface: #292929;
+  --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747;
+  --cp-border-strong: #5f5f5f;
+  --cp-text: #dedede;
+  --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1;
+  --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14);
+  --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80;
+  --cp-danger: #f87171;
+  --cp-warning: #fbbf24;
+  --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-panel: rgba(41, 41, 41, 0.72);
+  --cp-panel-strong: rgba(41, 41, 41, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.04);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--cp-bg);
+  color: var(--cp-text);
+  font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+  padding: 32px 20px 56px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; }
+.head { text-align: center; margin-bottom: 26px; }
+.head h1 { font-size: 1.7rem; margin: 6px 0 4px; }
+.head p { color: var(--cp-text-muted); margin: 0; font-size: 0.95rem; }
+.badge { display:inline-block; padding:4px 14px; border-radius:999px; background:var(--cp-accent); color:var(--cp-accent-fg); font-weight:700; font-size:0.82rem; letter-spacing:.4px; }
+
+/* equation row of ingredient chips */
+.equation {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch;
+  gap: 10px; margin: 4px 0 30px;
+}
+.chip {
+  flex: 1 1 180px; max-width: 220px; text-align: center;
+  background: var(--cp-surface); border: 1px solid var(--cp-border);
+  border-radius: 16px; padding: 16px 12px;
+  box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+}
+.chip .emoji { font-size: 2.4rem; line-height: 1; }
+.chip .t { font-weight: 700; margin-top: 8px; font-size: 0.95rem; }
+.chip .s { color: var(--cp-text-muted); font-size: 0.78rem; margin-top: 2px; }
+.plus { align-self: center; font-size: 1.8rem; color: var(--cp-accent); font-weight: 700; }
+.equals { align-self: center; font-size: 1.8rem; color: var(--cp-accent); font-weight: 700; }
+.result {
+  flex: 1 1 200px; max-width: 240px; text-align: center;
+  background: var(--cp-accent-soft); border: 2px solid var(--cp-accent);
+  border-radius: 16px; padding: 16px 12px;
+}
+.result .emoji { font-size: 2.4rem; }
+.result .t { font-weight: 800; margin-top: 8px; color: var(--cp-accent); }
+.result .s { color: var(--cp-text-muted); font-size: 0.78rem; }
+
+/* detail cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 14px; }
+.card {
+  background: var(--cp-surface); border: 1px solid var(--cp-border);
+  border-radius: 16px; padding: 16px;
+  box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+}
+.card .hd { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.card .hd .big { font-size: 1.6rem; }
+.card .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 0.86rem; color: var(--cp-text-muted); }
+.card .row .i { font-size: 1.05rem; }
+.mono { font-family: Consolas,"Courier New",monospace; font-size: 0.8rem; background: var(--cp-surface-soft); padding: 1px 6px; border-radius: 6px; color: var(--cp-text); }
+
+.section-title { text-align:center; font-size:0.82rem; letter-spacing:1.2px; text-transform:uppercase; color:var(--cp-text-soft); margin: 30px 0 12px; }
+
+/* pipeline strip */
+.pipe { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; margin-top:6px; }
+.step { background:var(--cp-bg-elevated); border:1px solid var(--cp-border); border-radius:12px; padding:10px 14px; text-align:center; font-size:0.85rem; }
+.step .e { font-size:1.4rem; display:block; }
+.step .l { font-weight:600; margin-top:2px; }
+.go { color:var(--cp-accent); font-size:1.3rem; font-weight:700; }
+
+.zones { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+.zone { border-radius:16px; padding:14px 16px; border:1px solid var(--cp-border); }
+.zone.foundry { border-color:var(--cp-accent); background:var(--cp-accent-soft); }
+.zone.client { border-color:var(--cp-link); background:rgba(0,120,212,0.07); }
+.zone h3 { margin:0 0 8px; font-size:0.95rem; display:flex; align-items:center; gap:8px; }
+.zone ul { margin:0; padding-left:20px; font-size:0.85rem; color:var(--cp-text-muted); }
+.zone li { margin:4px 0; }
+.foot { margin-top:26px; text-align:center; color:var(--cp-text-soft); font-size:0.8rem; }
+@media (max-width:640px){ .zones{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <span class="badge">🧱 HOW HOSTED AGENT v13 IS BUILT</span>
+    <h1>🤖 Agent Framework · one private hosted agent</h1>
+    <p>4 building blocks → 1 deployed Foundry agent</p>
+  </div>
+
+  <!-- THE RECIPE / EQUATION -->
+  <div class="equation">
+    <div class="chip">
+      <div class="emoji">📜</div>
+      <div class="t">Skill</div>
+      <div class="s">baked in</div>
+    </div>
+    <div class="plus">+</div>
+    <div class="chip">
+      <div class="emoji">🧰</div>
+      <div class="t">MCP Tool</div>
+      <div class="s">in a toolbox</div>
+    </div>
+    <div class="plus">+</div>
+    <div class="chip">
+      <div class="emoji">⚙️📦</div>
+      <div class="t">Code Interp.</div>
+      <div class="s">+ container</div>
+    </div>
+    <div class="plus">+</div>
+    <div class="chip">
+      <div class="emoji">🧩</div>
+      <div class="t">Agent Framework</div>
+      <div class="s">glue + host</div>
+    </div>
+    <div class="equals">=</div>
+    <div class="result">
+      <div class="emoji">🚀</div>
+      <div class="t">Hosted Agent v13</div>
+      <div class="s">deployed to Foundry</div>
+    </div>
+  </div>
+
+  <!-- 4 BLOCK DETAILS -->
+  <div class="cards">
+    <div class="card">
+      <div class="hd"><span class="big">📜</span> Skill baked in</div>
+      <div class="row"><span class="i">📄</span> <span class="mono">SKILL.md</span> read at startup</div>
+      <div class="row"><span class="i">🎨</span> template <b>or</b> style-only PPT</div>
+      <div class="row"><span class="i">🔒</span> no skills-API write needed</div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><span class="big">🧰</span> MCP tool in toolbox</div>
+      <div class="row"><span class="i">🗄️</span> Starburst data queries</div>
+      <div class="row"><span class="i">🔐</span> toolbox brokers OAuth consent</div>
+      <div class="row"><span class="i">🎫</span> user signs in → allow</div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><span class="big">⚙️</span> Code Interpreter</div>
+      <div class="row"><span class="i">🐍</span> runs Python, makes <span class="mono">.pptx</span></div>
+      <div class="row"><span class="i">📦</span> writes into a container</div>
+      <div class="row"><span class="i">⬇️</span> file downloaded by caller</div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><span class="big">🧩</span> Agent Framework</div>
+      <div class="row"><span class="i">🔗</span> wires model + all tools</div>
+      <div class="row"><span class="i">🖧</span> hosts on Responses server</div>
+      <div class="row"><span class="i">🚀</span> <span class="mono">azd deploy</span> → Foundry</div>
+    </div>
+  </div>
+
+  <!-- BUILD PIPELINE -->
+  <div class="section-title">⏩ Build &amp; run pipeline</div>
+  <div class="pipe">
+    <div class="step"><span class="e">📝</span><span class="l">Author</span></div>
+    <span class="go">→</span>
+    <div class="step"><span class="e">🧩</span><span class="l">Assemble</span></div>
+    <span class="go">→</span>
+    <div class="step"><span class="e">🚀</span><span class="l">azd deploy</span></div>
+    <span class="go">→</span>
+    <div class="step"><span class="e">☁️</span><span class="l">Foundry v13</span></div>
+    <span class="go">→</span>
+    <div class="step"><span class="e">💬</span><span class="l">Ask</span></div>
+    <span class="go">→</span>
+    <div class="step"><span class="e">📎</span><span class="l">Get .pptx</span></div>
+  </div>
+
+  <!-- WHERE THINGS RUN -->
+  <div class="section-title">📍 Where it runs</div>
+  <div class="zones">
+    <div class="zone foundry">
+      <h3>☁️ Foundry (private)</h3>
+      <ul>
+        <li>🤖 the hosted agent</li>
+        <li>🧠 gpt-4.1 model</li>
+        <li>⚙️ Code Interpreter + 📦 container</li>
+        <li>🧰 Starburst toolbox → 🗄️ data</li>
+      </ul>
+    </div>
+    <div class="zone client">
+      <h3>🖥️ Client (local UI)</h3>
+      <ul>
+        <li>📦 creates the container</li>
+        <li>💬 sends the request</li>
+        <li>🔐 completes consent</li>
+        <li>⬇️ downloads the file</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot">🔑 The agent, tools, and Code Interpreter all execute in Foundry. The client just calls the API and pulls the file.</div>
+
+</div>
+</body>
+</html>

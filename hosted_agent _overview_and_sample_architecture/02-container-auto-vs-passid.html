@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Code Interpreter Container — Auto vs Pass-ID, and the VM question</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+      const theme = param || "light";
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef; --cp-bg-elevated: #fcfbf8; --cp-surface: #ffffff; --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede; --cp-border-strong: #919191; --cp-text: #242424; --cp-text-muted: #5c5c5c; --cp-text-soft: #6f6f6f;
+      --cp-accent: #5c2d91; --cp-accent-hover: #4c2478; --cp-accent-soft: #f1eaf8; --cp-accent-fg: #ffffff;
+      --cp-success: #107c10; --cp-danger: #dc2626; --cp-warning: #b26a00; --cp-link: #0078d4;
+      --cp-link-soft: #eaf3fc; --cp-link-line: #b6d8f5; --cp-accent-line: #d9c6ec;
+      --cp-success-soft: #e6f4e6; --cp-success-line: #bfe3bf; --cp-warning-soft: #fff6e5; --cp-warning-line: #f0d9a6;
+      --cp-danger-soft: #fdeaea; --cp-danger-line: #f3c4c4;
+      --cp-shadow: 0 18px 48px rgba(0,0,0,0.12);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--cp-bg); color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; -webkit-font-smoothing: antialiased; }
+    .canvas { max-width: 1320px; margin: 0 auto; padding: 32px 28px 44px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 6px; }
+    h1 { margin: 0; font-size: 26px; line-height: 1.2; }
+    .sub { margin: 5px 0 0; color: var(--cp-text-muted); font-size: 14px; }
+    .legend { display: flex; flex-direction: column; gap: 7px; flex: 0 0 auto; padding: 12px 16px; border: 1px solid var(--cp-border);
+      border-radius: 10px; background: var(--cp-surface); box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14); }
+    .legend-row { display: flex; align-items: center; gap: 9px; color: var(--cp-text-muted); font-size: 13px; }
+    .dot { width: 14px; height: 14px; border-radius: 50%; }
+    .dot.auto { background: var(--cp-link); }
+    .dot.passid { background: var(--cp-accent); }
+    .dot.sandbox { background: var(--cp-success); }
+
+    /* What the container is */
+    .anatomy { margin-top: 22px; padding: 20px; border: 1px solid var(--cp-border); border-radius: 16px; background: var(--cp-bg-elevated); }
+    .anatomy h2 { margin: 0 0 4px; font-size: 17px; }
+    .anatomy .an-note { margin: 0 0 15px; color: var(--cp-text-muted); font-size: 13px; }
+    .an-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .node { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 128px; gap: 7px;
+      padding: 14px 10px; border: 1px solid var(--cp-success-line); border-radius: 10px; background: var(--cp-success-soft); text-align: center; }
+    .node .icon { width: 32px; height: 32px; color: var(--cp-success); fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+    .node h3 { margin: 0; font-size: 12.5px; line-height: 1.2; }
+    .node p { margin: 0; color: var(--cp-text-muted); font-size: 10.8px; line-height: 1.3; }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 22px; }
+    .lane { position: relative; padding: 16px 18px 20px; overflow: hidden; border: 1px solid var(--cp-border);
+      border-radius: 16px; background: var(--cp-surface); box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14); }
+    .lane::before { position: absolute; top: 0; bottom: 0; left: 0; width: 6px; content: ""; }
+    .lane.auto::before { background: var(--cp-link); }
+    .lane.passid::before { background: var(--cp-accent); }
+    .lane-head { display: flex; align-items: center; gap: 10px; margin: 2px 0 3px 4px; }
+    .lane-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 10px; border-radius: 8px;
+      color: var(--cp-accent-fg); font-size: 13px; font-weight: 700; }
+    .auto .lane-badge { background: var(--cp-link); }
+    .passid .lane-badge { background: var(--cp-accent); }
+    .lane-title { font-size: 16px; font-weight: 700; }
+    .lane-tag { margin: 0 0 14px 6px; color: var(--cp-text-muted); font-size: 12.5px; }
+    .lane-tag b { color: var(--cp-text); }
+
+    .stack { display: flex; flex-direction: column; gap: 8px; }
+    .step { position: relative; display: flex; gap: 11px; align-items: flex-start; padding: 11px 13px 11px 12px;
+      border: 1px solid var(--cp-border); border-radius: 10px; background: var(--cp-surface-soft); }
+    .auto .step { background: var(--cp-link-soft); border-color: var(--cp-link-line); }
+    .passid .step { background: var(--cp-accent-soft); border-color: var(--cp-accent-line); }
+    .step .num { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: 1px;
+      border-radius: 50%; color: var(--cp-accent-fg); font-size: 12px; font-weight: 700; }
+    .auto .step .num { background: var(--cp-link); }
+    .passid .step .num { background: var(--cp-accent); }
+    .step h3 { margin: 0 0 2px; font-size: 13.5px; line-height: 1.2; }
+    .step p { margin: 0; color: var(--cp-text-muted); font-size: 11.8px; line-height: 1.32; }
+    .step code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; background: var(--cp-surface);
+      border: 1px solid var(--cp-border); border-radius: 4px; padding: 0 3px; }
+    .verdict { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 12.3px; line-height: 1.4; }
+    .auto .verdict { background: var(--cp-danger-soft); border: 1px solid var(--cp-danger-line); color: #7a1d1d; }
+    .passid .verdict { background: var(--cp-success-soft); border: 1px solid var(--cp-success-line); color: #164a16; }
+    .verdict b { font-weight: 700; }
+
+    .footer { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; margin-top: 22px; }
+    .callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--cp-border); border-radius: 10px;
+      background: var(--cp-surface); font-size: 13px; line-height: 1.42; }
+    .callout.warning { border-color: var(--cp-warning-line); background: var(--cp-warning-soft); }
+    .callout.success { border-color: var(--cp-success-line); background: var(--cp-success-soft); }
+    .callout-icon { flex: 0 0 auto; width: 24px; height: 24px; color: var(--cp-accent); fill: none; stroke: currentColor;
+      stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    .callout.warning .callout-icon { color: var(--cp-warning); }
+    .callout.success .callout-icon { color: var(--cp-success); }
+    .callout b { color: var(--cp-text); }
+    .callout ul { margin: 6px 0 0; padding-left: 16px; }
+    .callout li { margin: 3px 0; }
+    .callout code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; background: var(--cp-surface-soft);
+      border: 1px solid var(--cp-border); border-radius: 4px; padding: 0 4px; }
+    .note { margin-top: 16px; color: var(--cp-text-soft); font-size: 11.5px; line-height: 1.5; }
+
+    @media (max-width: 960px) { .an-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 900px) { header { flex-direction: column; } .split { grid-template-columns: 1fr; } .footer { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="canvas">
+    <header>
+      <div>
+        <h1>The code-interpreter container — and does it use a VM?</h1>
+        <p class="sub">Inside the hosted agent: auto spin-up vs. the pre-create + pass-ID approach we use</p>
+      </div>
+      <div class="legend" aria-label="Diagram legend">
+        <div class="legend-row"><span class="dot auto"></span>Auto container</div>
+        <div class="legend-row"><span class="dot passid"></span>Pre-create + pass ID (ours)</div>
+        <div class="legend-row"><span class="dot sandbox"></span>Managed sandbox</div>
+      </div>
+    </header>
+
+    <!-- WHAT THE CONTAINER IS -->
+    <section class="anatomy">
+      <h2>What the "container" actually is</h2>
+      <p class="an-note">A Microsoft-managed sandbox that Foundry spins up on its own backend — you never provision or pay for a VM by the hour.</p>
+      <div class="an-grid">
+        <div class="node">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+          <h3>Managed sandbox session</h3><p>A "code interpreter session" Foundry runs for you — abstracted, ephemeral.</p>
+        </div>
+        <div class="node">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/></svg>
+          <h3>Hyper-V isolated</h3><p>A per-session micro-VM security boundary — <b>Microsoft-managed</b>, not one you deploy.</p>
+        </div>
+        <div class="node">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M4 12h16M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/><path d="M5 5l14 14"/></svg>
+          <h3>No outbound network</h3><p>Can't <code>pip install</code>; a fixed set of preinstalled packages, same region as the project.</p>
+        </div>
+        <div class="node">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H4z"/><path d="M9 20h6"/><path d="M8 9l3 2-3 2"/></svg>
+          <h3>Nothing local</h3><p>Not your machine, not a VM you manage. Foundry owns the host lifecycle.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- AUTO vs PASS-ID -->
+    <div class="split">
+      <!-- AUTO -->
+      <section class="lane auto">
+        <div class="lane-head">
+          <span class="lane-badge">AUTO</span>
+          <span class="lane-title">container: auto</span>
+        </div>
+        <p class="lane-tag">The code interpreter <b>spins up its own container</b> each session.</p>
+        <div class="stack">
+          <div class="step">
+            <span class="num">1</span>
+            <div><h3>Tool requested with <code>container:{type:"auto"}</code></h3><p>No container id supplied — the service creates one on demand.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">2</span>
+            <div><h3>Service provisions a session</h3><p>A fresh managed sandbox is created for that turn/conversation.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">3</span>
+            <div><h3>Python runs, files written to <code>/mnt/data</code></h3><p>Charts / PPTX are generated inside the sandbox.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">4</span>
+            <div><h3>...but you can't get the files back</h3><p>In <b>private</b> Foundry the output files aren't surfaced for download.</p></div>
+          </div>
+        </div>
+        <div class="verdict"><b>Blocked for us:</b> in private Foundry, file download fails — and a hosted agent's managed identity often can't even <b>create</b> a container (RBAC 403).</div>
+      </section>
+
+      <!-- PASS-ID -->
+      <section class="lane passid">
+        <div class="lane-head">
+          <span class="lane-badge">PASS-ID</span>
+          <span class="lane-title">pre-create + pass container id</span>
+        </div>
+        <p class="lane-tag">The <b>client pre-creates</b> the container, then hands its id to the agent. <b>This is what we use.</b></p>
+        <div class="stack">
+          <div class="step">
+            <span class="num">1</span>
+            <div><h3><code>POST /openai/v1/containers</code></h3><p>Client (its own identity) creates the session up front → returns <code>cntr_…</code>.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">2</span>
+            <div><h3>Pass <code>USE_CONTAINER_ID=cntr_…</code></h3><p>Sent in each request; the agent binds code interpreter to that exact container.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">3</span>
+            <div><h3>Agent only <b>uses</b> the container</h3><p>Managed identity never creates one → sidesteps the RBAC 403.</p></div>
+          </div>
+          <div class="step">
+            <span class="num">4</span>
+            <div><h3>Client downloads the files</h3><p><code>GET /containers/{id}/files/{file_id}/content</code> — the PPTX/chart comes back.</p></div>
+          </div>
+        </div>
+        <div class="verdict"><b>Works today:</b> same managed sandbox, but because we own the id we can enumerate &amp; download outputs and avoid the create-permission error.</div>
+      </section>
+    </div>
+
+    <div class="footer">
+      <div class="callout success">
+        <svg class="callout-icon" viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 4-3 7-8 8-5-1-8-4-8-8V7z"/><path d="M9 12l2 2 4-4"/></svg>
+        <div>
+          <b>So — does it use a VM?</b>
+          <ul>
+            <li><b>Not a VM you spin up.</b> No local VM, no AKS node, no compute you provision or pay by the hour.</li>
+            <li>Under the hood it's a <b>Hyper-V-isolated micro-VM</b> used purely as a security sandbox — created, run, and torn down by Microsoft.</li>
+            <li>Auto and pass-ID use the <b>same</b> sandbox. Pass-ID only changes <b>who creates it and who can read the files</b>.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout warning">
+        <svg class="callout-icon" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg>
+        <div>
+          <b>Lifecycle &amp; latency</b>
+          <ul>
+            <li>Session is active up to <b>1 hour</b> with a <b>30-min idle</b> timeout; reused within that window.</li>
+            <li>Spin-up is a <b>one-time, few-seconds</b> cold start per session — no VM-boot minutes. After that, calls hit the warm container.</li>
+            <li>Pass-ID adds one extra <code>POST /containers</code> round-trip — negligible.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">"Hyper-V isolation" describes how Microsoft sandboxes the session; it is a managed micro-VM boundary, not a virtual machine you deploy, size, or pay compute-hours for. The Azure Container Apps dynamic-session detail is an implementation note — the official docs describe it simply as a "sandboxed execution environment."</p>
+  </main>
+</body>
+</html>
