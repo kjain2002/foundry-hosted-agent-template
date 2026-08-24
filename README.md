@@ -31,6 +31,7 @@ The hosted agent is deployed to Foundry and you test the respective **live Found
 | **1** | [Get the right Foundry resource](#stage-1) | ⏭️ Skip if you already have a project |
 | **2** | [Roles & permissions](#stage-2) | ✅ Almost always — this is what breaks |
 | **3** | [Smoke test](#stage-3) | 🧪 Optional but recommended — catch errors early |
+| **3.5** | [Probe Container test](#stage-3-5) | 🔎 Optional — confirm the file endpoint works in *your* env |
 | **4** | [Design your agent](#stage-4) | ✅ Tools, personality, skills |
 | **5** | [Deploy the hosted agent](#stage-5) | ✅ Always |
 | **6** | [Edit, test locally, publish to Teams](#stage-6) | ✅ Always |
@@ -478,6 +479,66 @@ azd down --purge
 > `azd down --purge` deletes **everything in this azd environment.** Only run it if `azd` **created** the project. If you deployed into a **pre‑existing / shared** project, skip it — delete just the test agent, or use a **separate azd environment** for the smoke test.
 
 </details>
+
+</div>
+
+</details>
+
+<a id="stage-3-5"></a>
+<details>
+<summary style="margin:1.4em 0 .4em;padding-bottom:.3em;border-bottom:1px solid #484848;"><h2 style="display:inline;border:0;padding:0;">🔎 Stage 3.5 — Probe Container test</h2></summary>
+
+> [!TIP]
+> Code Interpreter **file upload/download** flows through a container *files* endpoint whose **scope differs by environment**. This 30‑second probe tells you exactly which URL *your* Foundry env accepts — so file features work the first time instead of throwing `404`.
+
+### <span style="color:#58a6ff">3.5.1 — Why run it</span>
+
+<div style="margin-left:1.5em">
+
+- The local UI creates a container, then uploads/downloads files at `.../openai/v1/containers/{id}/files`.
+- Some environments serve that endpoint at **project scope** (`/api/projects/<project>/openai/v1/...`), others at **account scope** (`/openai/v1/...`), and a few need an `api-version`.
+- Get it wrong → **`404 Not Found` on upload** and **no download link** (the generated file silently never surfaces).
+- The probe finds the right combination for **your** env in one run — no guessing.
+
+</div>
+
+### <span style="color:#58a6ff">3.5.2 — Run it</span>
+
+<div style="margin-left:1.5em">
+
+<details open>
+<summary>🧪 <strong>Create a container + test every file URL</strong></summary>
+
+<br>
+
+> [!IMPORTANT]
+> Run it in the **same environment (identity + network)** your agent/UI uses — `az login`'d, and on your VPN if the project is private. It reads `FOUNDRY_PROJECT_ENDPOINT` from your azd `.env` (same as the UI), or from an env var you set.
+
+```powershell
+# from the repo root — uses your azd .env automatically
+python probe_container_files.py
+
+# — or point it explicitly —
+$env:FOUNDRY_PROJECT_ENDPOINT = "https://<account>.services.ai.azure.com/api/projects/<project>"
+python probe_container_files.py
+```
+
+</details>
+
+</div>
+
+### <span style="color:#58a6ff">3.5.3 — Read the verdict</span>
+
+<div style="margin-left:1.5em">
+
+The probe creates a container at **project** *and* **account** scope, uploads a tiny test file to every candidate URL, and prints each status. The bottom `VERDICT:` line is your answer:
+
+- **`CONTAINER_API_SCOPE=project`** → the UI's default. Files work as‑is; **nothing to change.** ✅
+- **`CONTAINER_API_SCOPE=account`** → your env serves files at **account** scope. The container calls must drop the `/api/projects/<project>` prefix — share your `VERDICT:` line and we'll wire the scope switch.
+- **All `404` / "network problem"** → not a scope issue: you're not reaching the private endpoint (VPN / DNS / hosts). Fix connectivity and re‑run.
+
+> [!NOTE]
+> **Key rule the probe reveals:** a container's **create scope and files scope must match.** Creating at project scope but reading files at account scope (or vice‑versa) returns `404`. Use whichever single scope your `VERDICT:` line reports.
 
 </div>
 
